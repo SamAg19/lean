@@ -126,6 +126,31 @@ docker-local: ./target/x86_64-unknown-linux-gnu/release/lean_client
 		$(DOCKER_TAGS) \
 		.
 
+### Hive
+# ethereum/hive ref to build. Unset (default) => latest master, resolved at
+# clone time. Override with `make test-hive HIVE_VERSION=<commit>` to pin.
+HIVE_VERSION ?=
+HIVE_REF := $(or $(HIVE_VERSION),master)
+
+# The hive binary is a real-file target so Make caches it. It depends on a
+# ref stamp: changing HIVE_VERSION changes the stamp filename, which forces a
+# fresh clone + rebuild; an unchanged ref leaves the binary untouched.
+hive/hive: hive/.hive-ref-$(HIVE_REF)
+	@echo "==> Building hive binary (go build)..."
+	@cd hive && go build .
+	@echo "==> Built hive binary at hive/hive ($$(cd hive && git rev-parse --short HEAD))"
+
+hive/.hive-ref-$(HIVE_REF):
+	@echo "==> Fetching ethereum/hive at ref '$(HIVE_REF)'..."
+	@rm -rf hive
+	@mkdir -p hive
+	@cd hive && git init -q && \
+		git remote add origin https://github.com/ethereum/hive.git && \
+		git fetch --depth 1 -q origin $(HIVE_REF) && \
+		git switch -q --detach FETCH_HEAD
+	@echo "==> Checked out hive at $$(cd hive && git rev-parse --short HEAD)"
+	@touch $@
+
 ### Shadow-simulator support
 # `rust/patch/quinn-udp` is a vendored fallback-only build of quinn-udp so QUIC
 # runs under the Shadow simulator (which does not emulate sendmsg cmsg / GRO /
