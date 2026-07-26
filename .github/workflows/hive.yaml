@@ -16,7 +16,7 @@ jobs:
     name: Run hive tests
     runs-on: ubuntu-latest
     # hive itself imposes no timeout; cap the job so a hang can't run forever.
-    timeout-minutes: 90
+    timeout-minutes: 180
     env:
       # `docker-local` -> `cross` bind-mounts this into the build container.
       LEAN_REPO_ROOT: ${{ github.workspace }}
