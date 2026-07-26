@@ -81,18 +81,23 @@ build:
 clean:
 	cargo clean
 	rm -rf ./bin
+	rm -rf ./hive
+
+CLIENT_SOURCES := $(shell find . \( -name '*.rs' -o -name 'Cargo.toml' \) \
+	-not -path './target/*' -not -path './hive/*' -not -path './spec/*' \
+	-not -path './bin/*') Cargo.lock
 
 .PHONY: x86_64-unknown-linux-gnu
 x86_64-unknown-linux-gnu: ./target/x86_64-unknown-linux-gnu/release/lean_client
 
-./target/x86_64-unknown-linux-gnu/release/lean_client:
+./target/x86_64-unknown-linux-gnu/release/lean_client: $(CLIENT_SOURCES)
 	CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C target-cpu=x86-64-v3" \
 	LEAN_REPO_ROOT=$(LEAN_REPO_ROOT) cross build --bin lean_client --target x86_64-unknown-linux-gnu --profile release
 
 .PHONY: aarch64-unknown-linux-gnu
 aarch64-unknown-linux-gnu: ./target/aarch64-unknown-linux-gnu/release/lean_client
 
-./target/aarch64-unknown-linux-gnu/release/lean_client:
+./target/aarch64-unknown-linux-gnu/release/lean_client: $(CLIENT_SOURCES)
 	LEAN_REPO_ROOT=$(LEAN_REPO_ROOT) cross build --bin lean_client --target aarch64-unknown-linux-gnu --profile release
 
 .PHONY: release
@@ -132,9 +137,16 @@ docker-local: ./target/x86_64-unknown-linux-gnu/release/lean_client
 HIVE_VERSION ?=
 HIVE_REF := $(or $(HIVE_VERSION),master)
 
-# The hive binary is a real-file target so Make caches it. It depends on a
-# ref stamp: changing HIVE_VERSION changes the stamp filename, which forces a
-# fresh clone + rebuild; an unchanged ref leaves the binary untouched.
+.PHONY: test-hive
+test-hive: hive/hive docker-local
+	cd hive && ./hive --sim lean \
+		--client-file simulators/lean/clients/devnet5.yaml \
+		--client grandine_lean_devnet5 \
+		--sim.limit 'lean-spec-tests-verify-signatures' \
+		--docker.output \
+		--docker.nocache="hive/clients/grandine_lean_devnet5" \
+		--results-root ./workspace/logs
+
 hive/hive: hive/.hive-ref-$(HIVE_REF)
 	@echo "==> Building hive binary (go build)..."
 	@cd hive && go build .
