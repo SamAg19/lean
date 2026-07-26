@@ -142,7 +142,6 @@ test-hive: hive/hive docker-local
 	cd hive && ./hive --sim lean \
 		--client-file simulators/lean/clients/devnet5.yaml \
 		--client grandine_lean_devnet5 \
-		--sim.limit 'lean-spec-tests-verify-signatures' \
 		--docker.output \
 		--docker.nocache="hive/clients/grandine_lean_devnet5" \
 		--results-root ./workspace/logs
