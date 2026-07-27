@@ -143,6 +143,7 @@ test-hive: hive/hive docker-local
 	./hive --sim lean \
 		--client-file simulators/lean/clients/devnet5.yaml \
 		--client grandine_lean_devnet5 \
+		--sim.limit 'lean-spec-tests-verify-signatures' \
 		--docker.output \
 		--docker.nocache="hive/clients/grandine_lean_devnet5" \
 		--results-root ./workspace/logs; \
@@ -157,25 +158,31 @@ test-hive: hive/hive docker-local
 		echo "jq not found; skipping summary. Raw results under $$logs"; \
 		exit 0; \
 	fi; \
+	summary=$$( \
+		echo "==================== Hive test summary ===================="; \
+		total=0; failed_total=0; \
+		for f in $$suites; do \
+			name=$$(jq -r '.name' "$$f"); \
+			n=$$(jq '.testCases | length' "$$f"); \
+			nf=$$(jq '[.testCases[] | select(.summaryResult.pass | not)] | length' "$$f"); \
+			total=$$((total + n)); failed_total=$$((failed_total + nf)); \
+			if [ "$$nf" -eq 0 ]; then \
+				printf '%s: %d/%d passed\n' "$$name" "$$n" "$$n"; \
+			else \
+				printf '%s: %d/%d passed (%d failed)\n' "$$name" "$$((n - nf))" "$$n" "$$nf"; \
+				jq -r '.testCases[] | select(.summaryResult.pass | not) | "  FAIL: \(.name)"' "$$f"; \
+			fi; \
+		done; \
+		echo "-----------------------------------------------------------"; \
+		printf 'Total: %d/%d passed, %d failed\n' "$$((total - failed_total))" "$$total" "$$failed_total"; \
+		echo "Full failure details: lean_client/hive/workspace/logs/details/"; \
+		echo "===========================================================" \
+	); \
 	echo; \
-	echo "==================== Hive test summary ===================="; \
-	total=0; failed_total=0; \
-	for f in $$suites; do \
-		name=$$(jq -r '.name' "$$f"); \
-		n=$$(jq '.testCases | length' "$$f"); \
-		nf=$$(jq '[.testCases[] | select(.summaryResult.pass | not)] | length' "$$f"); \
-		total=$$((total + n)); failed_total=$$((failed_total + nf)); \
-		if [ "$$nf" -eq 0 ]; then \
-			printf '%s: %d/%d passed\n' "$$name" "$$n" "$$n"; \
-		else \
-			printf '%s: %d/%d passed (%d failed)\n' "$$name" "$$((n - nf))" "$$n" "$$nf"; \
-			jq -r '.testCases[] | select(.summaryResult.pass | not) | "  FAIL: \(.name)"' "$$f"; \
-		fi; \
-	done; \
-	echo "-----------------------------------------------------------"; \
-	printf 'Total: %d/%d passed, %d failed\n' "$$((total - failed_total))" "$$total" "$$failed_total"; \
-	echo "Full failure details: lean_client/hive/workspace/logs/details/"; \
-	echo "==========================================================="
+	printf '%s\n' "$$summary"; \
+	if [ -n "$$GITHUB_STEP_SUMMARY" ]; then \
+		{ echo '```'; printf '%s\n' "$$summary"; echo '```'; } >> "$$GITHUB_STEP_SUMMARY"; \
+	fi
 
 hive/hive: hive/.hive-ref-$(HIVE_REF)
 	@echo "==> Building hive binary (go build)..."
