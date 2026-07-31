@@ -20,6 +20,13 @@ CURRENT_DEVNET := devnet-5
 # Repo root that cross bind-mounts into its build container (see
 # `lean_client/Cross.toml`). Auto-derived locally; CI overrides via env.
 LEAN_REPO_ROOT ?= $(shell git rev-parse --show-toplevel)
+# ethereum/hive ref to build. Defaults to latest master, resolved at clone time.
+# Override with `make test-hive HIVE_VERSION=<commit>` to pin a specific commit.
+HIVE_VERSION ?= master
+# Devnet variant of the grandine lean hive client to test. Selects the client
+# definition (`simulators/lean/clients/<HIVE_DEVNET>.yaml`) and image
+# (`grandine_lean_<HIVE_DEVNET>`). Note: hive uses `devnet5` (no hyphen).
+HIVE_DEVNET ?= devnet5
 
 # Temporary variable, which constructs `--tag` arguments, to be passed into 
 #   docker build command. It is used as intermediatery step, not as config 
@@ -83,9 +90,9 @@ clean:
 	rm -rf ./bin
 	rm -rf ./hive
 
-CLIENT_SOURCES := $(shell find . \( -name '*.rs' -o -name 'Cargo.toml' \) \
-	-not -path './target/*' -not -path './hive/*' -not -path './spec/*' \
-	-not -path './bin/*') Cargo.lock
+CLIENT_SOURCES := $(shell find . \
+	\( -path './target' -o -path './hive' -o -path './spec' -o -path './bin' \) -prune \
+	-o \( -name '*.rs' -o -name 'Cargo.toml' \) -print) Cargo.lock
 
 .PHONY: x86_64-unknown-linux-gnu
 x86_64-unknown-linux-gnu: ./target/x86_64-unknown-linux-gnu/release/lean_client
@@ -132,19 +139,14 @@ docker-local: ./target/x86_64-unknown-linux-gnu/release/lean_client
 		.
 
 ### Hive
-# ethereum/hive ref to build. Unset (default) => latest master, resolved at
-# clone time. Override with `make test-hive HIVE_VERSION=<commit>` to pin.
-HIVE_VERSION ?=
-HIVE_REF := $(or $(HIVE_VERSION),master)
-
 .PHONY: test-hive
 test-hive: hive/hive docker-local
 	@cd hive && \
 	./hive --sim lean \
-		--client-file simulators/lean/clients/devnet5.yaml \
-		--client grandine_lean_devnet5 \
+		--client-file simulators/lean/clients/$(HIVE_DEVNET).yaml \
+		--client grandine_lean_$(HIVE_DEVNET) \
 		--docker.output \
-		--docker.nocache="hive/clients/grandine_lean_devnet5" \
+		--docker.nocache="hive/clients/grandine_lean_$(HIVE_DEVNET)" \
 		--results-root ./workspace/logs; \
 	hive_status=$$?; \
 	logs=./workspace/logs; \
@@ -183,18 +185,18 @@ test-hive: hive/hive docker-local
 		{ echo '```'; printf '%s\n' "$$summary"; echo '```'; } >> "$$GITHUB_STEP_SUMMARY"; \
 	fi
 
-hive/hive: hive/.hive-ref-$(HIVE_REF)
+hive/hive: hive/.hive-ref-$(HIVE_VERSION)
 	@echo "==> Building hive binary (go build)..."
 	@cd hive && go build .
 	@echo "==> Built hive binary at hive/hive ($$(cd hive && git rev-parse --short HEAD))"
 
-hive/.hive-ref-$(HIVE_REF):
-	@echo "==> Fetching ethereum/hive at ref '$(HIVE_REF)'..."
+hive/.hive-ref-$(HIVE_VERSION):
+	@echo "==> Fetching ethereum/hive at ref '$(HIVE_VERSION)'..."
 	@rm -rf hive
 	@mkdir -p hive
 	@cd hive && git init -q && \
 		git remote add origin https://github.com/ethereum/hive.git && \
-		git fetch --depth 1 -q origin $(HIVE_REF) && \
+		git fetch --depth 1 -q origin $(HIVE_VERSION) && \
 		git switch -q --detach FETCH_HEAD
 	@echo "==> Checked out hive at $$(cd hive && git rev-parse --short HEAD)"
 	@touch $@
