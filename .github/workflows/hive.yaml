@@ -44,16 +44,3 @@ jobs:
 
       - name: Run hive tests
         run: make test-hive
-
-      # Persist hive's per-suite JSON results and `details/` failure logs, which
-      # otherwise die with the runner. `always()` keeps them even when a step
-      # fails. Needed to debug failures (e.g. deadline/connection errors that
-      # only surface on CI).
-      - name: Upload hive logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: hive-logs
-          path: lean_client/hive/workspace/logs/
-          retention-days: 1
-          if-no-files-found: warn
